@@ -27,6 +27,17 @@ The interface is redesigned from the ground up to follow **Premium Glassmorphic 
 
 ## ✨ Key Features
 
+### 🔐 User Authentication & Security
+- **Secure Register & Login**: Protects the dashboard and APIs, requiring credentials to gain access.
+- **Robust Password Hashing**: Passwords are secure-salted and hashed using standard `werkzeug.security` SHA256 routines before being stored, preventing credential leaks.
+- **Session-Based State**: Flask sessions remember logged-in users with a signed cookies implementation.
+
+### 🕒 Search Threads & Query History
+- **Persistent Memory**: Q&A interactions and email summaries are saved dynamically to a SQLite database.
+- **Recent Threads Sidebar**: A panel showing the user's latest 10 query threads.
+- **Restart (Reload)**: Click any history thread to automatically reload the queries and answers back into the dashboard inputs and output boxes.
+- **Delete (Modify)**: Safely remove threads from database history with one click.
+
 ### 🧠 Gemini 3.5 Flash Integration
 - Fully integrated with Google's latest generative models using the OpenAI-compatible endpoint.
 - Optimized response caching and system prompts for high-speed delivery.
@@ -37,7 +48,7 @@ The interface is redesigned from the ground up to follow **Premium Glassmorphic 
 
 ### 🎨 Premium Glassmorphic User Interface
 - **Ambient Glow Orbs**: Floating cyan and purple background light sources that move dynamically in the background.
-- **Two-Column Responsive Grid**: Separates workflows into visual modules (Cyan-themed Q&A, Purple-themed Email Summarization).
+- **Three-Column Responsive Grid**: Grid panel separating workflows into visual modules (History, Q&A Assistant, Email Summarizer).
 - **Responsive Design**: Stacks vertically on mobile screens and presents a clean dashboard layout on desktops.
 - **Micro-Animations**: Hover animations on cards, neon focus states on text inputs, and custom CSS loaders.
 

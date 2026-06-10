@@ -41,7 +41,50 @@
 
     <div class="grid-container">
         
-        <!-- Card 1: Ask Anything -->
+        <!-- Column 1: Recent Threads History -->
+        <div class="card">
+            <h2>
+                <span class="header-icon cyan" style="color: #38bdf8; background: rgba(56, 189, 248, 0.08);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </span>
+                Recent Threads
+            </h2>
+            <p class="card-desc">Your past assistant and summary queries. Click a thread to reload.</p>
+            
+            <div class="threads-list" id="threadsList">
+                {% if threads %}
+                    {% for thread in threads %}
+                        <div class="thread-item {{ thread.thread_type }}-type" id="thread-{{ thread.id }}" 
+                             onclick="reloadThread({{ thread.id }}, '{{ thread.thread_type }}', {{ thread.query_text | tojson | safe }}, {{ thread.response_text | tojson | safe }})">
+                            <div class="thread-content-wrapper">
+                                <span class="header-icon {% if thread.thread_type == 'ask' %}cyan{% else %}purple{% endif %}" style="padding: 2px; border-radius: 4px;">
+                                    {% if thread.thread_type == 'ask' %}
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                    {% else %}
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                    {% endif %}
+                                </span>
+                                <div class="thread-info">
+                                    <span class="thread-title">{% if thread.thread_type == 'ask' %}Ask Assistant{% else %}Email Summary{% endif %}</span>
+                                    <span class="thread-snippet">{{ thread.query_text }}</span>
+                                </div>
+                            </div>
+                            <div class="thread-actions" onclick="event.stopPropagation();">
+                                <button class="action-btn delete-btn" onclick="deleteThread({{ thread.id }})" title="Delete Thread">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-history" id="emptyHistory">
+                        <span>No history found. Your search threads will appear here!</span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Column 2: Ask Anything -->
         <div class="card">
             <h2>
                 <span class="header-icon cyan">
@@ -65,7 +108,7 @@
             <div id="answer" class="output-box"></div>
         </div>
 
-        <!-- Card 2: Summarize Email -->
+        <!-- Column 3: Summarize Email -->
         <div class="card">
             <h2>
                 <span class="header-icon purple">
@@ -101,8 +144,110 @@
     {% endif %}
 
 <script>
+    function reloadThread(id, type, query, response) {
+        if (type === 'ask') {
+            document.querySelector('#askForm input[name="question"]').value = query;
+            let output = document.getElementById("answer");
+            output.innerText = response;
+            output.style.display = "block";
+            // Scroll to the ask form
+            document.getElementById("askForm").scrollIntoView({ behavior: 'smooth' });
+        } else if (type === 'summarize') {
+            document.querySelector('#emailForm textarea[name="email"]').value = query;
+            let output = document.getElementById("summary");
+            output.innerText = response;
+            output.style.display = "block";
+            // Scroll to the email form
+            document.getElementById("emailForm").scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    async function deleteThread(id) {
+        if (!confirm("Are you sure you want to delete this thread?")) return;
+
+        try {
+            let res = await fetch(`/threads/${id}/delete`, {
+                method: "POST"
+            });
+            let data = await res.json();
+            if (data.status === "success") {
+                let threadEl = document.getElementById(`thread-${id}`);
+                if (threadEl) {
+                    threadEl.style.transition = "all 0.3s ease";
+                    threadEl.style.opacity = "0";
+                    threadEl.style.transform = "scale(0.8) translateY(-10px)";
+                    setTimeout(() => {
+                        threadEl.remove();
+                        // If no threads left, show empty message
+                        let list = document.getElementById("threadsList");
+                        if (list && list.querySelectorAll('.thread-item').length === 0) {
+                            list.innerHTML = `<div class="empty-history" id="emptyHistory">
+                                <span>No history found. Your search threads will appear here!</span>
+                            </div>`;
+                        }
+                    }, 300);
+                }
+            }
+        } catch (err) {
+            console.error("Error deleting thread:", err);
+            alert("Failed to delete thread.");
+        }
+    }
+
+    function addThreadToHistory(id, type, query, response) {
+        // Remove empty history banner if it exists
+        let emptyBanner = document.getElementById("emptyHistory");
+        if (emptyBanner) emptyBanner.remove();
+
+        let list = document.getElementById("threadsList");
+        if (!list) return;
+
+        let icon = type === 'ask' 
+            ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
+            : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`;
+        
+        let typeLabel = type === 'ask' ? 'Ask Assistant' : 'Email Summary';
+        let accentColor = type === 'ask' ? 'cyan' : 'purple';
+
+        let newThread = document.createElement("div");
+        newThread.className = `thread-item ${type}-type`;
+        newThread.id = `thread-${id}`;
+        // Set event listener programmatically to avoid HTML escaping issues
+        newThread.onclick = () => reloadThread(id, type, query, response);
+
+        newThread.innerHTML = `
+            <div class="thread-content-wrapper">
+                <span class="header-icon ${accentColor}" style="padding: 2px; border-radius: 4px;">
+                    ${icon}
+                </span>
+                <div class="thread-info">
+                    <span class="thread-title">${typeLabel}</span>
+                    <span class="thread-snippet">${escapeHtml(query)}</span>
+                </div>
+            </div>
+            <div class="thread-actions" onclick="event.stopPropagation();">
+                <button class="action-btn delete-btn" onclick="deleteThread(${id})" title="Delete Thread">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+            </div>
+        `;
+        list.insertBefore(newThread, list.firstChild);
+    }
+
+    function escapeHtml(text) {
+        let map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
     document.getElementById("askForm").onsubmit = async (e) => {
         e.preventDefault();
+        let question = document.querySelector('#askForm input[name="question"]').value;
         let formData = new FormData(e.target);
 
         let loading = document.getElementById("ans-loading");
@@ -120,6 +265,10 @@
             let data = await res.json();
             output.innerText = data.response;
             output.style.display = "block";   // show output
+            
+            if (data.thread_id) {
+                addThreadToHistory(data.thread_id, 'ask', question, data.response);
+            }
         } catch (err) {
             output.innerText = "Error: Failed to fetch response.";
             output.style.display = "block";
@@ -130,6 +279,7 @@
 
     document.getElementById("emailForm").onsubmit = async (e) => {
         e.preventDefault();
+        let emailVal = document.querySelector('#emailForm textarea[name="email"]').value;
         let formData = new FormData(e.target);
 
         let loading = document.getElementById("summary-loading");
@@ -147,6 +297,10 @@
             let data = await res.json();
             output.innerText = data.response;
             output.style.display = "block";   // show output
+            
+            if (data.thread_id) {
+                addThreadToHistory(data.thread_id, 'summarize', emailVal, data.response);
+            }
         } catch (err) {
             output.innerText = "Error: Failed to generate summary.";
             output.style.display = "block";

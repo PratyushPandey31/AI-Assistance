@@ -67,7 +67,32 @@ is_api_configured = client is not None
 def hello_world():
     if "user_id" not in session:
         return redirect(url_for("login_page"))
-    return render_template("index.html", is_simulated=not is_api_configured, provider=provider, username=session.get("username"))
+    
+    conn = get_db_connection()
+    threads = conn.execute(
+        "SELECT * FROM threads WHERE user_id = ? ORDER BY created_at DESC LIMIT 10",
+        (session["user_id"],)
+    ).fetchall()
+    conn.close()
+    
+    # Convert threads to a list of dicts to be easily used in Jinja or JSON
+    thread_list = []
+    for t in threads:
+        thread_list.append({
+            "id": t["id"],
+            "thread_type": t["thread_type"],
+            "query_text": t["query_text"],
+            "response_text": t["response_text"],
+            "created_at": t["created_at"]
+        })
+        
+    return render_template(
+        "index.html", 
+        is_simulated=not is_api_configured, 
+        provider=provider, 
+        username=session.get("username"), 
+        threads=thread_list
+    )
 
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
@@ -130,6 +155,17 @@ def logout_action():
     flash("You have been logged out.", "success")
     return redirect(url_for("login_page"))
 
+@app.route("/threads/<int:thread_id>/delete", methods=["POST"])
+def delete_thread(thread_id):
+    if "user_id" not in session:
+        return jsonify({"response": "Unauthorized"}), 401
+        
+    conn = get_db_connection()
+    conn.execute("DELETE FROM threads WHERE id = ? AND user_id = ?", (thread_id, session["user_id"]))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "success"}), 200
+
 @app.route("/ask", methods=["POST"])
 def ask():
     if "user_id" not in session:
@@ -139,6 +175,7 @@ def ask():
     if not question:
         return jsonify({"response": "Please ask a valid question."}), 400
     
+    answer = ""
     if is_api_configured and client:
         try:
             if provider == "Gemini":
@@ -153,7 +190,6 @@ def ask():
                     max_tokens=800
                 )
                 answer = response.choices[0].message.content.strip()
-                return jsonify({"response": answer}), 200
             
             else: # OpenAI
                 try:
@@ -168,7 +204,6 @@ def ask():
                         max_output_tokens=512
                     )
                     answer = response.output_text.strip()
-                    return jsonify({"response": answer}), 200
                 except Exception as e:
                     print(f"Error with Responses API (gpt-5.4): {e}. Trying ChatCompletions fallback...")
                     # Try fallback standard chat completions (gpt-4o)
@@ -182,23 +217,32 @@ def ask():
                         max_tokens=512
                     )
                     answer = response.choices[0].message.content.strip()
-                    return jsonify({"response": answer}), 200
                     
         except Exception as ex:
             print(f"API Error: {ex}. Falling back to simulation.")
-            return jsonify({
-                "response": f"[Simulation Mode - API Error: {ex}]\n\nI received your question: \"{question}\". Since the API call failed, here is a simulated response. Please verify your API key validity."
-            }), 200
+            answer = f"[Simulation Mode - API Error: {ex}]\n\nI received your question: \"{question}\". Since the API call failed, here is a helpful simulation: Please verify your API key validity."
     else:
         # Simulation Mode
-        simulated_response = (
+        answer = (
             f"🤖 [Simulation Mode]\n\n"
             f"You asked: \"{question}\"\n\n"
             f"If an API key was configured, this response would be generated dynamically "
             f"using {model_name or 'AI models'}. For now, here is a simulated answer: Your Flask application is fully configured "
             f"and running. You can ask questions, manage data, and summarize text once a valid API key is set!"
         )
-        return jsonify({"response": simulated_response}), 200
+        
+    # Save to thread history
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO threads (user_id, thread_type, query_text, response_text) VALUES (?, ?, ?, ?)",
+        (session["user_id"], "ask", question, answer)
+    )
+    conn.commit()
+    thread_id = cursor.lastrowid
+    conn.close()
+    
+    return jsonify({"response": answer, "thread_id": thread_id}), 200
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
@@ -211,6 +255,7 @@ def summarize():
         
     prompt = f"summarize the following email in 2-3 sentences:\n\n{email_text}"
     
+    summary = ""
     if is_api_configured and client:
         try:
             if provider == "Gemini":
@@ -225,7 +270,6 @@ def summarize():
                     max_tokens=800
                 )
                 summary = response.choices[0].message.content.strip()
-                return jsonify({"response": summary}), 200
             
             else: # OpenAI
                 try:
@@ -239,7 +283,6 @@ def summarize():
                         max_output_tokens=512
                     )
                     summary = response.output_text.strip()
-                    return jsonify({"response": summary}), 200
                 except Exception as e:
                     print(f"Error with Responses API (gpt-5.4): {e}. Trying ChatCompletions fallback...")
                     response = client.chat.completions.create(
@@ -252,13 +295,10 @@ def summarize():
                         max_tokens=512
                     )
                     summary = response.choices[0].message.content.strip()
-                    return jsonify({"response": summary}), 200
                     
         except Exception as ex:
             print(f"API Error: {ex}. Falling back to simulation.")
-            return jsonify({
-                "response": f"[Simulation Mode - API Error: {ex}]\n\nEmail Summary Simulation: The email details discussions regarding key action items. To see a real AI summary, please check your API key."
-            }), 200
+            summary = f"[Simulation Mode - API Error: {ex}]\n\nEmail Summary Simulation: The email details discussions regarding key action items. To see a real AI summary, please check your API key."
     else:
         # Simulation Mode: Parse the email to make the summary look smart
         lines = [line.strip() for line in email_text.split("\n") if line.strip()]
@@ -274,14 +314,26 @@ def summarize():
         if len(body_snippet) > 120:
             body_snippet = body_snippet[:120] + "..."
             
-        simulated_summary = (
+        summary = (
             f"📧 [Simulation Mode Summary]\n\n"
             f"• Sender/Context: {sender if sender != 'Unknown Sender' else 'Parsed from message body'}\n"
             f"• Main Subject: {subject if subject != 'No Subject' else 'General correspondence'}\n"
             f"• Content Summary: The email outlines key points stating: \"{body_snippet}\". "
             f"To get a real AI-generated summary, add a valid API key."
         )
-        return jsonify({"response": simulated_summary}), 200
+        
+    # Save to thread history
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO threads (user_id, thread_type, query_text, response_text) VALUES (?, ?, ?, ?)",
+        (session["user_id"], "summarize", email_text, summary)
+    )
+    conn.commit()
+    thread_id = cursor.lastrowid
+    conn.close()
+    
+    return jsonify({"response": summary, "thread_id": thread_id}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
