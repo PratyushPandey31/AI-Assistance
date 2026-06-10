@@ -3,33 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Personal Assistant</title>
+    <title>AI CoPilot Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1 class="main-heading">AI Personal Assistant</h1>
 
-    <div class="container">
+    <!-- Floating Background Glow Orbs -->
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
 
-        <h2>Ask Anything</h2>
-        <form id="askForm">
-            <input type="text" name="question" placeholder="Ask anything..." required>
-            <button type="submit">Ask</button>
-        </form>
-        <p id="ans-loading" style="display: none;">Processing...</p>
-        <p id="answer"></p>
+    <div class="app-header">
+        <h1 class="main-heading">AI CoPilot</h1>
+        <p class="sub-heading">Intelligent Assistant & Email Summarization Tool</p>
+        
+        <!-- Status Indicator -->
+        {% if is_simulated %}
+        <div class="status-badge simulation">
+            <span class="dot"></span> Simulation Mode
+        </div>
+        {% else %}
+        <div class="status-badge live">
+            <span class="dot"></span> Live API Mode ({{ provider }})
+        </div>
+        {% endif %}
+    </div>
 
-        <hr>
+    <div class="grid-container">
+        
+        <!-- Card 1: Ask Anything -->
+        <div class="card">
+            <h2>
+                <span class="header-icon cyan">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </span>
+                Ask Anything
+            </h2>
+            <p class="card-desc">Get instant, smart answers to your questions using Gemini.</p>
+            <form id="askForm">
+                <input type="text" name="question" placeholder="What would you like to know?" required>
+                <button type="submit" class="btn-cyan">
+                    <span>Ask Assistant</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+            
+            <div id="ans-loading" class="loader-text">
+                <div class="loader-spinner"></div>
+                <span>Thinking...</span>
+            </div>
+            <div id="answer" class="output-box"></div>
+        </div>
 
-        <h2>Summarize Email</h2>
-        <form id="emailForm">
-            <textarea type="text" name="email" placeholder="Paste your email here.." required></textarea>
-            <button type="submit">Summarize</button>
-        </form>
-        <p id="summary-loading" style="display: none;">Processing...</p>
-        <p id="summary"></p>
+        <!-- Card 2: Summarize Email -->
+        <div class="card">
+            <h2>
+                <span class="header-icon purple">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                </span>
+                Summarize Email
+            </h2>
+            <p class="card-desc">Condense long emails into a neat, 2-3 sentence overview.</p>
+            <form id="emailForm">
+                <textarea name="email" placeholder="Paste the content of the email you want summarized..." required></textarea>
+                <button type="submit" class="btn-purple">
+                    <span>Summarize</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+            </form>
+            
+            <div id="summary-loading" class="loader-text">
+                <div class="loader-spinner"></div>
+                <span>Analyzing email...</span>
+            </div>
+            <div id="summary" class="output-box"></div>
+        </div>
 
     </div>
+
+    {% if is_simulated %}
+    <div class="info-box-wrapper">
+        <div class="info-box">
+            💡 <strong>API Setup Required</strong>: To activate Live Mode using OpenAI's models, create a file named <code>.env</code> in the project root directory and add your key: <br>
+            <code>OPENAI_API_KEY=your-actual-api-key</code>
+        </div>
+    </div>
+    {% endif %}
 
 <script>
     document.getElementById("askForm").onsubmit = async (e) => {
@@ -37,37 +95,54 @@
         let formData = new FormData(e.target);
 
         let loading = document.getElementById("ans-loading");
-        loading.style.display = "block";   // show loader
+        let output = document.getElementById("answer");
+        
+        loading.style.display = "flex";   // show loader
+        output.style.display = "none";    // hide previous output
 
-        let res = await fetch("/ask", {
-            method: "POST",
-            body: formData
-        });
+        try {
+            let res = await fetch("/ask", {
+                method: "POST",
+                body: formData
+            });
 
-        let data = await res.json();
-        document.getElementById("answer").innerText = data.response;
-
-        loading.style.display = "none";   // hide loader
+            let data = await res.json();
+            output.innerText = data.response;
+            output.style.display = "block";   // show output
+        } catch (err) {
+            output.innerText = "Error: Failed to fetch response.";
+            output.style.display = "block";
+        } finally {
+            loading.style.display = "none";   // hide loader
+        }
     };
 
-document.getElementById("emailForm").onsubmit = async (e) => {
-    e.preventDefault();
-    let formData = new FormData(e.target);
+    document.getElementById("emailForm").onsubmit = async (e) => {
+        e.preventDefault();
+        let formData = new FormData(e.target);
 
-    let loading = document.getElementById("summary-loading");
-    loading.style.display = "block";
+        let loading = document.getElementById("summary-loading");
+        let output = document.getElementById("summary");
 
-    let res = await fetch("/summarize", {
-        method: "POST",
-        body: formData
-    });
+        loading.style.display = "flex";   // show loader
+        output.style.display = "none";    // hide previous output
 
-    let data = await res.json();
-    document.getElementById("summary").innerText = data.response;
+        try {
+            let res = await fetch("/summarize", {
+                method: "POST",
+                body: formData
+            });
 
-    loading.style.display = "none";   // hide loader
-};
-
+            let data = await res.json();
+            output.innerText = data.response;
+            output.style.display = "block";   // show output
+        } catch (err) {
+            output.innerText = "Error: Failed to generate summary.";
+            output.style.display = "block";
+        } finally {
+            loading.style.display = "none";   // hide loader
+        }
+    };
 </script>
 
 </body>

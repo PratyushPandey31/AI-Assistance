@@ -9,3 +9,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Virtual Environment
+venv/
+
+# Vercel
+.vercel/
+.vercel
