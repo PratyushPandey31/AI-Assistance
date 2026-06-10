@@ -1,13 +1,38 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 import os
+import sqlite3
 from dotenv import load_dotenv
 from openai import OpenAI
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "pratyush_secret_fallback_key_2026")
 
 load_dotenv()
 openai_key = os.getenv("OPENAI_API_KEY")
 gemini_key = os.getenv("GEMINI_API_KEY")
+
+# SQLite Configuration (uses /tmp on Vercel to allow writes)
+DATABASE = "/tmp/users.db" if os.environ.get("VERCEL") else "users.db"
+
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    db_dir = os.path.dirname(DATABASE)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+    conn = get_db_connection()
+    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    with open(schema_path, "r") as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
+
+# Initialize Database
+init_db()
 
 client = None
 provider = None
@@ -40,10 +65,76 @@ is_api_configured = client is not None
 
 @app.route("/")
 def hello_world():
-    return render_template("index.html", is_simulated=not is_api_configured, provider=provider)
+    if "user_id" not in session:
+        return redirect(url_for("login_page"))
+    return render_template("index.html", is_simulated=not is_api_configured, provider=provider, username=session.get("username"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if "user_id" in session:
+        return redirect(url_for("hello_world"))
+        
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        
+        if not username or not password:
+            flash("Please fill in all fields.", "error")
+            return render_template("login.html")
+            
+        conn = get_db_connection()
+        user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        conn.close()
+        
+        if user and check_password_hash(user["password_hash"], password):
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+            return redirect(url_for("hello_world"))
+        else:
+            flash("Invalid username or password.", "error")
+            
+    return render_template("login.html")
+
+@app.route("/signup", methods=["POST"])
+def signup_action():
+    if "user_id" in session:
+        return redirect(url_for("hello_world"))
+        
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "").strip()
+    
+    if not username or not password:
+        flash("Please fill in all fields.", "error")
+        return redirect(url_for("login_page"))
+        
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+        return redirect(url_for("login_page"))
+        
+    conn = get_db_connection()
+    try:
+        password_hash = generate_password_hash(password)
+        conn.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
+        conn.commit()
+        flash("Signup successful! Please log in.", "success")
+    except sqlite3.IntegrityError:
+        flash("Username already exists.", "error")
+    finally:
+        conn.close()
+        
+    return redirect(url_for("login_page"))
+
+@app.route("/logout")
+def logout_action():
+    session.clear()
+    flash("You have been logged out.", "success")
+    return redirect(url_for("login_page"))
 
 @app.route("/ask", methods=["POST"])
 def ask():
+    if "user_id" not in session:
+        return jsonify({"response": "Unauthorized access. Please log in first."}), 401
+        
     question = request.form.get("question", "").strip()
     if not question:
         return jsonify({"response": "Please ask a valid question."}), 400
@@ -111,6 +202,9 @@ def ask():
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
+    if "user_id" not in session:
+        return jsonify({"response": "Unauthorized access. Please log in first."}), 401
+        
     email_text = request.form.get("email", "").strip()
     if not email_text:
         return jsonify({"response": "Please provide email text to summarize."}), 400
@@ -191,6 +285,7 @@ def summarize():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 

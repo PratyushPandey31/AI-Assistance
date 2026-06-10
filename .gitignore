@@ -15,4 +15,9 @@ venv/
 
 # Vercel
 .vercel/
+
+# Database Files
+*.db
+*.sqlite
+
 .vercel

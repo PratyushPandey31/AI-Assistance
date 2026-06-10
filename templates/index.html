@@ -12,6 +12,17 @@
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
 
+    <!-- Top Navigation Bar -->
+    <div class="top-bar">
+        <div class="user-greeting">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            Welcome, <span>{{ username }}</span>
+        </div>
+        <a href="{{ url_for('logout_action') }}" class="btn-logout" style="text-decoration: none;">
+            Logout
+        </a>
+    </div>
+
     <div class="app-header">
         <h1 class="main-heading">AI CoPilot</h1>
         <p class="sub-heading">Intelligent Assistant & Email Summarization Tool</p>
