@@ -60,15 +60,17 @@ The interface is redesigned from the ground up to follow **Premium Glassmorphic 
 AI-Assistance/
 │
 ├── static/
-│   └── style.css       # Core stylesheet (dark glassmorphism, responsive grid, animations)
+│   └── style.css       # Core stylesheet (dark glassmorphism, responsive grid, auth layout)
 │
 ├── templates/
-│   └── index.html      # Responsive dashboard UI (status indicators, SVG icons, forms)
+│   ├── index.html      # Responsive dashboard UI (status indicators, SVG icons, forms, top nav)
+│   └── login.html      # Glassmorphic Login/Signup auth form layout
 │
 ├── .env                # Local configuration (API Keys - Git-ignored)
-├── .gitignore          # Safeguards virtual envs, secrets, and Vercel build configs
-├── main.py             # Main Flask server (handles routing, multi-provider API setup, and simulation logic)
-├── requirements.txt    # Lists all required Python packages for deployment
+├── .gitignore          # Safeguards virtual envs, database files, and Vercel configs
+├── main.py             # Main Flask server (handles routing, session auth, db init, and Gemini logic)
+├── requirements.txt    # Lists all required Python packages for Vercel deployment
+├── schema.sql          # SQLite Database tables schema definition (users & threads)
 └── vercel.json         # Vercel Serverless Function routing and build configuration
 ```
 
