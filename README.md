@@ -143,9 +143,3 @@ The application is mapped using Vercel's Python runtime (`@vercel/python`):
    ```bash
    vercel --name pratyush-ai-assistance -e GEMINI_API_KEY=your_key --prod --yes
    ```
-
----
-
-## 🔒 Security Configuration
-- `.env` files are added to `.gitignore` to guarantee API keys are never pushed to public repositories.
-- Local environments (`venv/`) and Vercel build folders (`.vercel/`) are ignored to keep the repository clean and lightweight.
